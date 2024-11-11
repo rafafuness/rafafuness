@@ -1,0 +1,136 @@
+  /* VERSION 3.
+   1 SENSOR DE MOVIMIENTO PARA INGRESO
+   1 SENSOR DE MOVIMIENTO PARA SALIDA
+   1 LED AMARILLO INDICA INGRESO
+   1 LED ROJO INDICA LLENO
+   1 LED VERDE INDICA HAY LUGAR DISPONIBLE
+   1 LED BLANCO INDICA SALIDA
+
+   TRAMA ARRAY DE 3 CHAR:
+        POSICION 0 INDICA OCUPACION ACTUAL
+        POSICION 1 INDICA TOTAL DE INGRESOS
+        POSICION 2 INDICA ESTADO
+
+   ESTADOS POSIBLES:
+        I:  INICIO DE SISTEMA 
+        F:  LLENO
+        K:  HAY LUGAR
+        NOTA: K ES ESTADO POR DEFECTO. LUEGO DE INICIO DE ESTADO I PASA AL ESTADO K EN SETUP
+  
+
+*/
+
+
+unsigned char capacidad = 5;
+unsigned char ocupacion = 0;
+unsigned char total=0; 
+
+char trama[3]={0,0,0};
+
+int ingreso;
+int egreso;
+
+int amarillo = 2;
+int rojo = 10;
+int verde = 8;
+int blanco = 14;
+
+int entrada = 4;
+int salida = 6;
+
+
+
+void enviarTrama(char x){
+  trama[0]=ocupacion;
+  trama[1]=total;
+  trama[2]=x;
+  Serial.write(trama,3);
+  Serial.print('\n');
+  delay(500);  
+}
+
+
+
+
+void setup() {
+  Serial.begin(9600);
+ 
+
+  pinMode(entrada, INPUT);
+  pinMode(salida, INPUT);
+
+  pinMode(amarillo, OUTPUT);
+  digitalWrite(amarillo, LOW);
+
+  pinMode(rojo, OUTPUT);
+  digitalWrite(rojo, LOW);
+
+  pinMode(verde, OUTPUT);
+  digitalWrite(verde, HIGH);
+
+  pinMode(blanco, OUTPUT);
+  digitalWrite(blanco, LOW);
+
+  // ENVIO ESTADO INICIO
+  enviarTrama('I');
+  
+  // PASO A ESTADO POR DEFECTO
+  trama[2]='K';  
+
+}
+void loop() {
+
+  ingreso = digitalRead(entrada);
+  egreso = digitalRead(salida);
+
+
+  // REGISTRO EGRESO
+  if (egreso == HIGH && ocupacion > 0) {
+    
+    digitalWrite(blanco, HIGH);
+    digitalWrite(rojo, LOW);
+    digitalWrite(verde, HIGH);
+    digitalWrite(amarillo, LOW);
+    ocupacion--;
+
+    // ENVIO ESTADO POR DEFECTO
+    enviarTrama('K');
+    
+  } else {
+    digitalWrite(blanco, LOW);
+  }
+
+
+
+
+  // REGISTRO INGRESO
+  if (ingreso == HIGH && ocupacion < capacidad) {
+    
+    digitalWrite(amarillo, HIGH);
+    digitalWrite(blanco, LOW);
+    ocupacion++;
+    total++;    
+
+    // ENVIO ESTADO POR DEFECTO
+    enviarTrama('K');
+    
+  } else {
+    digitalWrite(amarillo, LOW);
+  } 
+
+  // CONTROL DE CAPACIDAD MAXIMA
+  if(ocupacion >= capacidad) {
+
+    digitalWrite(verde, LOW);
+    digitalWrite(rojo, HIGH);
+    digitalWrite(blanco, LOW);
+    digitalWrite(amarillo, LOW);
+
+    // ENVIO ESTADO LLENO
+    enviarTrama('F');
+  }
+
+  // RETARDO PARA TOMAR LA POXIMA LECTURA
+  delay(2000);
+
+}
