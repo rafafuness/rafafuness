@@ -1,0 +1,161 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <termios.h>
+#include <errno.h>
+
+
+
+
+int main()
+{
+   int CADENA_LONGITUD=3;
+   float PRECIO =15.10;
+   int CAPACIDAD =5; 
+
+
+
+
+   // Abrir el puerto serie (usualmente /dev/ttyUSB0 o /dev/ttyACM0 en Linux)
+   int serialPort = open("/dev/ttyUSB0", O_RDONLY);
+
+
+   if (serialPort < 0)
+   {
+       perror("Error al abrir el puerto serie");
+       return 1;
+   }
+
+
+   // Configuración de la estructura termios para la configuración del puerto serie
+   struct termios tty;
+   if (tcgetattr(serialPort, &tty) != 0)
+   {
+       perror("Error al obtener la configuración del puerto serie");
+       return 1;
+   }
+
+
+   // Configurar los parámetros del puerto serie
+   cfsetispeed(&tty, B9600); // Velocidad de entrada (9600 baudios)
+   cfsetospeed(&tty, B9600); // Velocidad de salida (9600 baudios)
+
+
+   tty.c_cflag &= ~PARENB;        // Sin paridad
+   tty.c_cflag &= ~CSTOPB;        // 1 bit de parada
+   tty.c_cflag &= ~CSIZE;         // Limpiar tamaño de palabra
+   tty.c_cflag |= CS8;            // 8 bits de datos
+   tty.c_cflag &= ~CRTSCTS;       // Sin control de flujo
+   tty.c_cflag |= CREAD | CLOCAL; // Habilitar receptor y evitar control de línea
+
+
+   tty.c_iflag &= ~(IXON | IXOFF | IXANY); // Desactivar control de flujo software
+   tty.c_iflag &= ~ICANON;                 // Desactivar entrada canónica
+   tty.c_iflag &= ~ECHO;                   // Desactivar eco de caracteres
+   tty.c_iflag &= ~ECHOE;                  // Desactivar eco de borrado
+   tty.c_iflag &= ~ISIG;                   // Desactivar señales
+   tty.c_iflag &= ~IEXTEN;                 // Desactivar extensiones de entrada
+
+
+   tty.c_oflag &= ~OPOST; // Desactivar procesamiento de salida
+   tty.c_oflag &= ~ONLCR; // No convertir '\n' a '\r\n'
+
+
+   tty.c_cc[VMIN] = 1;   // Leer al menos 1 byte
+   tty.c_cc[VTIME] = 10; // Tiempo de espera de 1 decima de segundo (100 ms)
+
+
+   // Aplicar la configuración al puerto serie
+   if (tcsetattr(serialPort, TCSANOW, &tty) != 0)
+   {
+       perror("Error al configurar el puerto serie");
+       return 1;
+   }
+
+
+   bool tramaOk = false;
+   int contadorOK = 0, contDescarte = 0;
+   while (1)
+   {
+
+
+       char cadena[CADENA_LONGITUD + 1] = {0}; // +1 para el terminador nulo '\0'
+
+
+       for (int i = 0; i < 4; i++)
+       {
+           // printf("FOR - i: %d  |",i);
+           char aux;
+           int bytesRead = read(serialPort, &aux, 1); // Leer 1 byte
+
+
+           if (aux >= 0) // SOLO DATOS POSITIVOS
+           {
+               // printf("TRUE if(aux>=0) \n");
+               if (aux == '\n')
+               {
+                   // printf("Encontre SALTO \n");
+
+
+                   if (i == 3)
+                   {
+                       // GUARDAR SALTO EN POSICION 3
+                       cadena[3] = aux;
+                       tramaOk = true;
+                   }
+                   else
+                   {
+                       i = 0;
+                       tramaOk = false;
+                       break;
+                   }
+               }
+               else
+               {
+                   // GUARDAR DATO EN ARRAY.
+                   cadena[i] = aux;
+               }
+           }
+           else
+           {
+               // REINICIAR EL CICLO
+               tramaOk = false;
+               break;
+           }
+       } // FINAL DE CICLO FOR DE LECTURA DE TRAMA
+
+
+       // VALIDAR TRAMA LEIDA
+       if (tramaOk)
+       {
+           // TRAMA CORRECTA
+           contadorOK++;
+
+
+           if (cadena[2] == 'I')
+           {
+               printf("\n\t\t############### INICIO SEMAFORO NANO  #############\n");
+           }
+           if (cadena[2] == 'F')
+           {
+               printf("Estado: LLENO | Total de Vehiculos Ingrados: %d  | Total Cobrado: $%0.2f \n\n", cadena[1],(cadena[1]*PRECIO) );
+           }
+           if ( (cadena[2] == 'K') && (cadena[0]!= CAPACIDAD) )
+           {
+               printf("Estado: OK | Hay (%d) Lugares Disponibles | Total de Vehiculos Ingrados: %d  | Total Cobrado: $%0.2f \n\n", (CAPACIDAD-cadena[0]), cadena[1],(cadena[1]*PRECIO) );
+           }
+        }
+
+
+
+
+
+
+   } // FINAL DE WHILE
+
+
+   // Cerrar el puerto serie
+   close(serialPort);
+   return 0;
+}
